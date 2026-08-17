@@ -131,7 +131,7 @@
       "artifactName": "Scalpel-${version}-mac-${arch}.${ext}",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "identity": null
+      "identity": "-"
     },
     "nsis": {
       "oneClick": false,
