@@ -56,7 +56,18 @@ function keyPart(e: KeyboardEvent, namedKeys: Record<string, string>): string {
     const glyph = e.key.length === 1 ? e.key.toUpperCase() : e.code
     return encodePhysicalKey(e.code, glyph)
   }
-  return e.key.length === 1 ? e.key.toUpperCase() : e.key
+  if (e.key.length === 1) {
+    const upper = e.key.toUpperCase()
+    // macOS Option-key combos turn letters/digits into non-ASCII glyphs
+    // (e.g. ⌥D -> "∂"), which Electron accelerators reject. Fall back to the
+    // physical key name so the recorded accelerator stays ASCII-valid.
+    if (/[^\x00-\x7F]/.test(upper)) {
+      const physical = e.code.match(/^(?:Key|Digit)(.+)$/)
+      return physical ? physical[1] : e.code
+    }
+    return upper
+  }
+  return e.key
 }
 
 export function prettyHotkey(accelerator: string | undefined | null): string {

@@ -103,5 +103,9 @@ export function parseAccelerator(accelerator: string): KeyCombo | null {
  * those rely solely on the uiohook keydown matcher.
  */
 export function isElectronRegisterable(accelerator: string): boolean {
-  return !accelerator.includes(PHYSICAL_PREFIX)
+  if (accelerator.includes(PHYSICAL_PREFIX)) return false
+  // Electron accelerators are ASCII-only. Non-ASCII key parts (e.g. macOS
+  // Option-combo glyphs like "∂" recorded by older builds) would make
+  // globalShortcut.register throw, so refuse them up front.
+  return /^[\x00-\x7F]*$/.test(accelerator)
 }
