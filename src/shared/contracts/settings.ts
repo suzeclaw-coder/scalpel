@@ -7,6 +7,11 @@ import type { PoeProfile } from './profiles'
 import type { HideableTabKey } from './items'
 import type { GameVariant } from './game-variant'
 
+export interface OverlayPanelSize {
+  width: number
+  height: number
+}
+
 export interface LegacyAppSettings {
   filterPathPoe1?: string
   filterPathPoe2?: string
@@ -32,6 +37,8 @@ export interface AppSettings {
   priceCheckHotkey: string
   overlayOpacity: number
   overlayScale: number
+  /** Persisted only after the user resizes the in-game overlay panel. */
+  overlayPanelSize?: OverlayPanelSize
   openSide: 'both' | 'right' | 'left'
   closeOnClickOutside: boolean
   useCurrentZoneAreaLevel: boolean

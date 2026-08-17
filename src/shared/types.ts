@@ -49,7 +49,7 @@ export type { OverlayAnchor, CheatSheet, CheatSheetCategory, CheatSheetsSettings
 
 export type { PoeProfile, PoeProfileSummary, ProfileSettingKey, ProfileSettingValue } from './contracts/profiles'
 
-export type { LegacyAppSettings, AppSettings, RuntimeSettings } from './contracts/settings'
+export type { LegacyAppSettings, AppSettings, OverlayPanelSize, RuntimeSettings } from './contracts/settings'
 
 export type { InstallManifest, Manifest, AuthResult } from './contracts/updates'
 

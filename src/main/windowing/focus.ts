@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron'
+import { inputCoordinateScaleFactor } from '../input-coordinate-scale'
 import { getSnapCanvasWindow, setSnapGhost } from './snap-canvas'
 import { firePoeLeaveHooks, getAuxiliaryScalpelWindows, getMainOverlay, overlays } from './state'
 
@@ -90,19 +91,22 @@ export function isAnyScalpelWindowFocused(): boolean {
  *  secondary window (cheat sheets etc.) don't get treated as "outside" and
  *  hide the main overlay.
  *
- *  Coordinates are in physical screen pixels (uIOhook reports them that way).
- *  BrowserWindow.getBounds() returns DIPs, so we have to scale before
- *  comparing - otherwise the check silently misfires on >100% DPI displays. */
-export function isInsideAnySecondaryOverlay(physX: number, physY: number): boolean {
+ *  Windows and Linux uIOhook coordinates are physical pixels, while macOS
+ *  reports Quartz points. BrowserWindow bounds use points on macOS and DIPs
+ *  elsewhere, so both sides must use the same platform-aware scale. */
+export function isInsideAnySecondaryOverlay(inputX: number, inputY: number): boolean {
   for (const state of overlays.values()) {
     if (!state.win || state.win.isDestroyed() || !state.win.isVisible()) continue
     const b = state.win.getBounds()
-    const sf = screen.getDisplayNearestPoint({ x: b.x, y: b.y }).scaleFactor
+    const sf = inputCoordinateScaleFactor(
+      process.platform,
+      screen.getDisplayNearestPoint({ x: b.x, y: b.y }).scaleFactor,
+    )
     const left = b.x * sf
     const top = b.y * sf
     const right = left + b.width * sf
     const bottom = top + b.height * sf
-    if (physX >= left && physX < right && physY >= top && physY < bottom) return true
+    if (inputX >= left && inputX < right && inputY >= top && inputY < bottom) return true
   }
   return false
 }

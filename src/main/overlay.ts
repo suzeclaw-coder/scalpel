@@ -10,6 +10,7 @@ import { loadPremiumMods, refreshPremiumMods } from './premium-mods'
 import { loadEndgameFilterSupport, refreshEndgameFilterSupport } from './trade/endgame-filter-support'
 import { closeAllOverlaysOnPoeExit, isAnyScalpelWindowFocused, isInsideAnySecondaryOverlay } from './windowing'
 import { getWhiteboardOverlay } from './whiteboard'
+import { inputCoordinateScaleFactor } from './input-coordinate-scale'
 import { POE_SIDEBAR_RATIO } from '@shared/poe-geometry'
 import { GAME_TITLES } from '@shared/contracts/game-variant'
 import { IPC_CHANNELS } from '@shared/contracts/ipc'
@@ -95,6 +96,10 @@ function getScaleFactor(): number {
   return screen.getPrimaryDisplay().scaleFactor
 }
 
+function getInputCoordinateScaleFactor(): number {
+  return inputCoordinateScaleFactor(process.platform, getScaleFactor())
+}
+
 ipcMain.on('report-panel-rect', (event, payload: unknown) => {
   // Accept either a single rect (legacy) or an array of rects (main + sister etc.).
   const rects = Array.isArray(payload)
@@ -102,7 +107,7 @@ ipcMain.on('report-panel-rect', (event, payload: unknown) => {
     : [payload as { left: number; top: number; width: number; height: number }]
   const tb = OverlayController.targetBounds
   if (!tb?.width) return
-  const sf = getScaleFactor()
+  const sf = getInputCoordinateScaleFactor()
   const phys = rects
     .filter((r) => r.width > 0 && r.height > 0)
     .map((r) => ({
@@ -133,7 +138,7 @@ ipcMain.on('clear-panel-rect', (event) => {
 // Allow renderer to pull initial state on mount (attach events may fire before renderer loads)
 ipcMain.handle('get-overlay-state', () => {
   const tb = OverlayController.targetBounds
-  const sf = getScaleFactor()
+  const sf = getInputCoordinateScaleFactor()
   return {
     poeVersion: getPoeVersion(),
     gameBounds: tb?.width
@@ -506,7 +511,7 @@ export function createOverlayWindow(version: 1 | 2 = 1, options?: CreateOverlayO
 
 function sendGameBounds(physWidth: number, physHeight: number): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
-  const sf = getScaleFactor()
+  const sf = getInputCoordinateScaleFactor()
   const gameWidth = Math.round(physWidth / sf)
   const gameHeight = Math.round(physHeight / sf)
   const sidebarWidth = Math.round(gameHeight * POE_SIDEBAR_RATIO)

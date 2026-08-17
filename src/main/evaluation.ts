@@ -328,7 +328,9 @@ async function captureItemFromClipboard(
 
   if (!item) {
     consecutiveClipboardFailures++
-    if (consecutiveClipboardFailures >= 3 && !isElevated()) {
+    // UAC privilege separation can block clipboard reads on Windows. macOS and
+    // Linux have no equivalent elevation mismatch, so do not show that hint.
+    if (process.platform === 'win32' && consecutiveClipboardFailures >= 3 && !isElevated()) {
       getOverlayWindow()?.webContents.send('elevation-hint')
     }
     getOverlayWindow()?.webContents.send('no-item-in-clipboard')

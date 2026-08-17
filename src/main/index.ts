@@ -57,6 +57,7 @@ import { fetchJson } from './trade/prices'
 import { stopOnlineSync } from './online-sync'
 import { applyPendingUpdate } from './update/update-swap'
 import { getCurrentFilter, loadFilter, onFilterLoaded } from './filter-state'
+import { migrateLegacyHotkeys } from './hotkey-migration'
 import {
   createHotkeyHandler,
   createPriceCheckHandler,
@@ -191,6 +192,9 @@ if (store.get('startInTray') === undefined) store.set('startInTray', true)
 if (store.get('pluginAutoUpdate') === undefined) store.set('pluginAutoUpdate', false)
 if (store.get('locale') === undefined) store.set('locale', 'en')
 
+const migratedHotkeys = migrateLegacyHotkeys(store)
+if (migratedHotkeys.length > 0) recordMainBreadcrumb(`migrated legacy hotkeys: ${migratedHotkeys.join(', ')}`)
+
 // tradeDefaultToBase (boolean) became tradeAffixesPrechecked (three-way). Gate on the OLD
 // key's presence, not on the new one being undefined: the new key is in `defaults`, so
 // store.get() always resolves it and an undefined-check would never fire. The old key is
@@ -285,11 +289,19 @@ registerScalpelPluginSchemePrivileges()
 
 // ---- App lifecycle ---------------------------------------------------------
 
+let revealAppWindowOnActivate = false
 const gotLock = IS_E2E || app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => showAppWindow())
+  // On macOS, launching an already-running menu-bar app emits `activate`
+  // instead of Electron's `second-instance` event. Preserve the request until
+  // the window exists, then reveal it so Dock/Finder activation is usable.
+  app.on('activate', () => {
+    revealAppWindowOnActivate = true
+    showAppWindow()
+  })
 }
 
 const installDir = IS_E2E ? process.cwd() : applyPendingUpdate()
@@ -517,7 +529,7 @@ app.whenReady().then(() => {
 
   if (!IS_E2E) startLiveServices({ store, installDir })
 
-  if (IS_E2E || !store.get('onboardingCompleted') || !store.get('startInTray')) {
+  if (IS_E2E || revealAppWindowOnActivate || !store.get('onboardingCompleted') || !store.get('startInTray')) {
     showAppWindow()
   }
 })

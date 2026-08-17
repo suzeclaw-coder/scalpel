@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { PluginHost } from '../plugins/PluginHost'
 import { PluginTabHost } from '../plugins/PluginTabHost'
 import type { RegisteredTab } from '../plugins/PluginHost'
-import type { AppSettings, RuntimeSettings, OverlayData, PoeItem, PriceInfo } from '@shared/types'
+import type { AppSettings, OverlayPanelSize, RuntimeSettings, OverlayData, PoeItem, PriceInfo } from '@shared/types'
 import { isHideableTabKey } from '@shared/types'
 import { m } from '@shared/paraglide/messages.js'
 import type { ExternalLinkTarget } from '@shared/external-link'
@@ -32,7 +32,7 @@ import { SisterOverlay } from './SisterOverlay'
 import { TierItemsSister } from './TierItemsSister'
 import { getActiveMatch } from '../shared/activeMatch'
 import { ItemSearchCombobox } from '../components/ItemSearchCombobox'
-import { Search } from '@icon-park/react'
+import { FullScreen, Search } from '@icon-park/react'
 import {
   IP,
   iconMap,
@@ -49,6 +49,7 @@ import { PluginErrorBanner } from '../plugins/PluginErrorBanner'
 import { usePluginAutoUpdate } from '../plugins/use-plugin-auto-update'
 import type { BrokenPlugin } from '../plugins/PluginErrorBanner'
 import type { View } from './view'
+import { DEFAULT_PANEL_WIDTH, resizePanel, type PanelSizeLimits } from './panel-size'
 
 /** Shape published to globalThis.__scalpel so the plugin SDK can read live
  *  icon maps without importing renderer-internal modules directly. */
@@ -57,7 +58,6 @@ interface ScalpelGlobal {
   divCardArtMap: Map<string, string>
 }
 
-const PANEL_WIDTH = 540
 const PANEL_TOP = 8
 
 /** How long the macro's pending-target ref stays armed before we drop it.
@@ -95,6 +95,10 @@ export default function App(): JSX.Element {
   // hides (ESC/hotkey) before the user releases the mouse — otherwise the snap
   // ghost stays painted at the mount point after the panel disappears.
   const cancelDragRef = useRef<(() => void) | null>(null)
+  const [resizedPanelSize, setResizedPanelSize] = useState<OverlayPanelSize | null>(null)
+  const panelSizeRef = useRef<OverlayPanelSize | null>(null)
+  const cancelResizeRef = useRef<(() => void) | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const sisterRef = useRef<HTMLDivElement>(null)
   const tierSisterRef = useRef<HTMLDivElement>(null)
@@ -397,6 +401,7 @@ export default function App(): JSX.Element {
       window.api.onNoItemInClipboard(() => setView('no-item')),
       window.api.onOverlayHide(() => {
         cancelDragRef.current?.()
+        cancelResizeRef.current?.()
         setClosing(true)
         setTimeout(() => {
           setClosing(false)
@@ -473,6 +478,7 @@ export default function App(): JSX.Element {
 
   const close = (): void => {
     cancelDragRef.current?.()
+    cancelResizeRef.current?.()
     setClosing(true)
     setTimeout(() => {
       setClosing(false)
@@ -481,9 +487,30 @@ export default function App(): JSX.Element {
     window.api.closeOverlay()
   }
 
+  const overlayScale = settings?.overlayScale ?? 1
+  const panelSizeLimits: PanelSizeLimits = {
+    // Keep a docked panel clear of both PoE sidebars. The transform scales from
+    // the docked edge, so the available visual width must be divided back to CSS px.
+    maxWidth: gameBounds
+      ? Math.max(DEFAULT_PANEL_WIDTH, (gameBounds.gameWidth - gameBounds.sidebarWidth * 2) / overlayScale)
+      : 1200,
+    maxHeight: gameBounds ? (gameBounds.gameHeight - PANEL_TOP * 2 - 23) / overlayScale : 900,
+  }
+  const requestedPanelSize = resizedPanelSize ?? settings?.overlayPanelSize ?? null
+  const panelWidth = requestedPanelSize
+    ? Math.max(DEFAULT_PANEL_WIDTH, Math.min(requestedPanelSize.width, panelSizeLimits.maxWidth))
+    : Math.min(DEFAULT_PANEL_WIDTH, panelSizeLimits.maxWidth)
+  const panelHeight = requestedPanelSize
+    ? Math.max(300, Math.min(requestedPanelSize.height, panelSizeLimits.maxHeight))
+    : undefined
+  panelSizeRef.current = {
+    width: panelWidth,
+    height: panelHeight ?? panelRef.current?.offsetHeight ?? 500,
+  }
+
   // Mount positions for both sides
   const leftMountX = gameBounds ? gameBounds.sidebarWidth - 1 : 0
-  const rightMountX = gameBounds ? gameBounds.gameWidth - gameBounds.sidebarWidth - PANEL_WIDTH + 1 : 0
+  const rightMountX = gameBounds ? gameBounds.gameWidth - gameBounds.sidebarWidth - panelWidth + 1 : 0
   const basePanelLeft = gameBounds ? (cursorSide === 'left' ? leftMountX : rightMountX) : undefined
 
   const skipAnimRef = useRef(false)
@@ -502,7 +529,6 @@ export default function App(): JSX.Element {
   }
   wasHiddenRef.current = isHidden
 
-  const panelRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<HTMLDivElement>(null)
 
   // Report the panel's actual visual bounding rect to the main process for click-through
@@ -696,6 +722,56 @@ export default function App(): JSX.Element {
     window.addEventListener('mouseup', onUp)
   }
 
+  const handleResizeMouseDown = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    const currentSize = panelSizeRef.current
+    if (!currentSize) return
+    const start = {
+      width: currentSize.width,
+      height: panelHeight ?? panelRef.current?.offsetHeight ?? currentSize.height,
+    }
+    const startX = e.clientX
+    const startY = e.clientY
+    document.body.classList.add('panel-resizing')
+    window.api.lockInteractive()
+    const onMove = (ev: MouseEvent): void => {
+      const next = resizePanel(
+        start,
+        ev.clientX - startX,
+        ev.clientY - startY,
+        cursorSide,
+        overlayScale,
+        panelSizeLimits,
+      )
+      panelSizeRef.current = next
+      setResizedPanelSize(next)
+    }
+    const finish = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.classList.remove('panel-resizing')
+      window.api.unlockInteractive()
+      cancelResizeRef.current = null
+    }
+    const onUp = (): void => {
+      const size = panelSizeRef.current
+      finish()
+      if (size) updateSetting('overlayPanelSize', size)
+    }
+    const cancel = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.classList.remove('panel-resizing')
+      window.api.unlockInteractive()
+      setResizedPanelSize(settings?.overlayPanelSize ?? null)
+      cancelResizeRef.current = null
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    cancelResizeRef.current = cancel
+  }
+
   const isFullHeightView =
     view === 'dust' ||
     view === 'divcards' ||
@@ -715,11 +791,10 @@ export default function App(): JSX.Element {
   // Panel and sister both scale inward (toward each other) from opposite outer edges, so
   // overlayScale > 1 eats into the gap from both sides. Add (S-1)*(PANEL+SISTER) worth of
   // CSS px so the post-scale visible gap stays at SISTER_GAP regardless of scale.
-  const overlayScale = settings?.overlayScale ?? 1
-  const sisterScaleOffset = (overlayScale - 1) * (PANEL_WIDTH + SISTER_WIDTH)
+  const sisterScaleOffset = (overlayScale - 1) * (panelWidth + SISTER_WIDTH)
   const sisterLeft =
     cursorSide === 'left'
-      ? (basePanelLeft ?? 0) + PANEL_WIDTH + SISTER_GAP + sisterScaleOffset
+      ? (basePanelLeft ?? 0) + panelWidth + SISTER_GAP + sisterScaleOffset
       : (basePanelLeft ?? 0) - SISTER_WIDTH - SISTER_GAP - sisterScaleOffset
   // Bound the sister to the game window the same way the main panel is, minus the
   // SISTER_NAV_OFFSET it already sits below. Scale divides out so the post-scale
@@ -831,7 +906,7 @@ export default function App(): JSX.Element {
           leftMountX={leftMountX}
           rightMountX={rightMountX}
           panelTop={PANEL_TOP}
-          panelWidth={PANEL_WIDTH}
+          panelWidth={panelWidth}
           panelHeight={isHidden ? 0 : (panelRef.current?.offsetHeight ?? 0)}
           snapTarget={isHidden ? null : snapTarget}
           overlayScale={settings?.overlayScale}
@@ -842,7 +917,7 @@ export default function App(): JSX.Element {
           style={{
             top: PANEL_TOP,
             left: basePanelLeft ?? 0,
-            width: PANEL_WIDTH,
+            width: panelWidth,
             display: isHidden ? 'none' : 'block',
             transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)${settings?.overlayScale && settings.overlayScale !== 1 ? ` scale(${settings.overlayScale})` : ''}`,
             transformOrigin: cursorSide === 'left' ? 'top left' : 'top right',
@@ -866,7 +941,7 @@ export default function App(): JSX.Element {
                         ? 'panel-slide-in-left 0.2s ease-out both'
                         : 'panel-slide-in 0.2s ease-out both'
                       : 'panel-fade-in 0.15s ease-out both',
-              width: PANEL_WIDTH,
+              width: panelWidth,
             }}
             onMouseEnter={() => {
               showAnimDone.current = true
@@ -875,12 +950,11 @@ export default function App(): JSX.Element {
           >
             <div
               ref={panelRef}
-              className="bg-bg flex flex-col overflow-hidden border-t border-b border-border"
+              className="group bg-bg relative flex flex-col overflow-hidden border-t border-b border-border"
               style={{
-                width: PANEL_WIDTH,
-                maxHeight: gameBounds
-                  ? (gameBounds.gameHeight - PANEL_TOP * 2 - 23) / (settings?.overlayScale ?? 1)
-                  : 'calc(100vh - 16px)',
+                width: panelWidth,
+                height: panelHeight,
+                maxHeight: panelSizeLimits.maxHeight,
                 borderRadius: isMounted ? (cursorSide === 'left' ? '0 10px 10px 0' : '10px 0 0 10px') : '10px',
                 borderLeft: isMounted && cursorSide === 'left' ? 'none' : '1px solid var(--border)',
                 borderRight: isMounted && cursorSide === 'right' ? 'none' : '1px solid var(--border)',
@@ -1125,6 +1199,13 @@ export default function App(): JSX.Element {
                     }}
                   />
                 )}
+              </div>
+              <div
+                title="Resize panel"
+                className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize items-end justify-end text-text-dim opacity-0 transition-opacity group-hover:opacity-100"
+                onMouseDown={handleResizeMouseDown}
+              >
+                <FullScreen size={11} {...IP} />
               </div>
             </div>
           </div>

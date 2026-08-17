@@ -27,7 +27,10 @@ function getAppIcon(): Electron.NativeImage {
     recordMainDiagnostic('tray-icon', new Error(`Unable to resolve tray icon ${iconExt}`))
     return nativeImage.createEmpty()
   }
-  return nativeImage.createFromPath(iconPath)
+  const icon = nativeImage.createFromPath(iconPath)
+  // The app artwork is 256px. macOS displays a tray image at its native size,
+  // so constrain it to the standard status-bar icon size.
+  return process.platform === 'darwin' ? icon.resize({ width: 18, height: 18, quality: 'best' }) : icon
 }
 
 export interface TrayDeps {
