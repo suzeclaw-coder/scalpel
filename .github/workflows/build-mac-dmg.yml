@@ -28,10 +28,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Extract version
-        id: version
-        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
-
       - name: Build DMG (macOS arm64)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -47,15 +43,13 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: mac-arm64-${{ steps.version.outputs.version }}
-          name: Scalpel ${{ steps.version.outputs.version }} (macOS ARM64)
-          body: |
-            Automated macOS Apple Silicon (arm64) build of Scalpel.
-            Built with electron-builder on a macOS 14 arm64 runner.
-            Unsigned build; if Gatekeeper blocks it, right-click the app and choose Open.
-          files: dist/*.dmg
-          draft: false
-          prerelease: true
-          generate_release_notes: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          echo "Publishing mac-arm64-${VERSION}"
+          gh release create "mac-arm64-${VERSION}" dist/*.dmg \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Scalpel ${VERSION} (macOS ARM64)" \
+            --prerelease \
+            --notes "Automated macOS Apple Silicon (arm64) build of Scalpel ${VERSION}. Unsigned; if Gatekeeper blocks it, right-click the app and choose Open."
