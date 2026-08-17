@@ -27,6 +27,7 @@
     "sync-icons": "node scripts/sync-item-icons-poe1.js",
     "dist:win": "npm run build && electron-builder --win --x64",
     "dist:linux": "npm run build && electron-builder --linux AppImage --x64",
+    "dist:mac": "npm run build && electron-builder --mac dmg --arm64",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.e2e.json",
     "postinstall": "node scripts/postinstall.js",
     "lint": "biome lint src && node scripts/check-import-aliases.mjs",
@@ -115,6 +116,22 @@
       "desktop": {
         "StartupWMClass": "scalpel"
       }
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.games",
+      "icon": "resources/icon-1024.png",
+      "artifactName": "Scalpel-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
     },
     "nsis": {
       "oneClick": false,
