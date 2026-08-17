@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
 import { app, type BrowserWindow, ipcMain } from 'electron'
 import { ELECTRON_RELEASES, GITHUB_RELEASES_API } from '@shared/endpoints'
 import type { InstallManifest } from '@shared/types'
-import { findBrickedMatch } from '@shared/version-match'
+import { compareVersions, findBrickedMatch } from '@shared/version-match'
 import { selectListRelease } from './select-release'
 import { recordMainBreadcrumb, registerDiagnosticProvider } from '../diagnostics'
 import { stopHotkeyListener } from '../hotkeys'
@@ -196,7 +196,10 @@ async function checkForUpdates(channel: string): Promise<void> {
       writeLocalManifest(local)
     }
 
-    if (runningVersion === remote.version) {
+    // Only offer an update when the remote release is actually newer than the
+    // running build. An exact-equality check would nag users on the prerelease
+    // line to "update" to an older stable release (e.g. 1.0.3-rc3 -> 1.0.2).
+    if (compareVersions(runningVersion, remote.version) >= 0) {
       return
     }
 
