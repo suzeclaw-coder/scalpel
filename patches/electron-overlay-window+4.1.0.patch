@@ -1,0 +1,20 @@
+diff --git a/node_modules/electron-overlay-window/src/lib/mac.mm b/node_modules/electron-overlay-window/src/lib/mac.mm
+index 907d460..51645db 100644
+--- a/node_modules/electron-overlay-window/src/lib/mac.mm
++++ b/node_modules/electron-overlay-window/src/lib/mac.mm
+@@ -571,8 +571,14 @@ static void waitUntilAccessibilityGranted() {
+       @{trustedCheckOptionPromptKey : @YES}));
+   // NSLog(@"waitUntilAccessibilityGranted: initial %d", trusted);
+ 
+-  while (!trusted) {
++  // Bounded wait: never block the hook thread forever waiting for the user to
++  // grant accessibility. If it isn't granted within ~15s, continue anyway so
++  // the app stays responsive; the overlay simply won't attach until the user
++  // grants the permission and relaunches.
++  int attempts = 0;
++  while (!trusted && attempts < 15) {
+     [NSThread sleepForTimeInterval:1.0];
++    attempts++;
+     // NSLog(@"waitUntilAccessibilityGranted: polling");
+     trusted = AXIsProcessTrustedWithOptions(static_cast<CFDictionaryRef>(
+         @{trustedCheckOptionPromptKey : @NO}));
